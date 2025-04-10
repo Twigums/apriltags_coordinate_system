@@ -1,0 +1,10 @@
+# exclude folder contents
+./bbox/*
+./templates/*
+./calibration/*
+
+# pycache
+./__pycache__/*
+
+# notebooks
+./.ipynb_checkpoints/
