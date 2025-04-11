@@ -6,7 +6,7 @@ from opencv_functions import *
 from utility_functions import color_to_rgb
 
 
-PATH_TO_CAMERA_CALIBRATION_FILE = "./calibration/20250310-Arducam.npz"
+PATH_TO_CAMERA_CALIBRATION_FILE = "./calibration/20250408-Arducam.npz"
 cam = cv2.VideoCapture(0)
 
 camera_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
