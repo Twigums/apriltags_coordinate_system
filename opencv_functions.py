@@ -1,10 +1,12 @@
-# istg training a model wouldve been easier than doing this lol
+# istg training a model wouldve been easier than doing this
 
 import apriltag, cv2
 import numpy as np
+from utility_functions import sort_2D_points
 
 
 # finds checkerboard image and uses cv2 to find camera calibration matrices and distortion coefficients
+# from opencv camera calibration wiki
 # saves result as a .npz file
 def calibrate_camera(path_to_checkerboard_image: str,
                      checkerboard_size: tuple[int, int],
@@ -19,6 +21,7 @@ def calibrate_camera(path_to_checkerboard_image: str,
     if found == False:
         raise ValueError("Found != True -> Checkerboard was not found.")
 
+    # find robust corner points
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     
     objp = np.zeros((checkerboard_units_y * checkerboard_units_x, 3), np.float32)
@@ -71,10 +74,57 @@ def rotate_image(image: np.ndarray,
     
     return rotated_image
 
+# using an image, find edges and derives a convex hull to represent all edges
+# convex hull is then represented as a polygon where corners can now be found
+def find_corners(image,
+                 ksize: tuple[int, int] = (5, 1),
+                 number_corners: int = 4,
+                 features_quality_level: float = 0.001,
+                 thickness: int = 2) -> np.ndarray:
+
+    height, width, _ = image.shape
+
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    threshold = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    
+    # use morphology to remove the thin lines
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize)
+    threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, kernel)
+    
+    # invert so that lines are white so that we can get contours for them
+    inverse_threshold = 255 - threshold
+    
+    # get external contours
+    contours = cv2.findContours(inverse_threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = contours[0] if len(contours) == 2 else contours[1]
+    
+    # keep contours whose bounding boxes are greater than 1/4 in each dimension
+    # draw them as white on black background
+    good_contours = np.zeros((height, width), dtype = np.uint8)
+    for contour in contours:
+        contour_x, contour_y, rect_width, rect_height = cv2.boundingRect(contour)
+
+        if rect_width > width / 4 and rect_height > height / 4:
+            cv2.drawContours(good_contours, [contour], 0, 255, thickness)
+            
+    # get convex hull from contour image white pixels
+    points = np.column_stack(np.where(good_contours.transpose() > 0))
+    convex_hull_points = cv2.convexHull(points)
+    
+    # draw hull on copy of input and on black background
+    convex_hull = np.zeros((height, width), dtype = np.uint8)
+    cv2.drawContours(convex_hull, [convex_hull_points], 0, 255, thickness)
+    
+    # get corners from white hull points on black background
+    min_dist = max(height, width) // 4
+    corners = cv2.goodFeaturesToTrack(convex_hull, number_corners, features_quality_level, min_dist)
+
+    return corners
+
 # easily initialize sift + flann
 def initialize_detector(flann_index_kdtree: int = 1,
                         flann_trees: int = 5,
-                        flann_checks: int = 50):
+                        flann_checks: int = 50) -> tuple[cv2.SIFT, cv2.FlannBasedMatcher]:
 
     sift = cv2.SIFT_create()
     
@@ -86,26 +136,43 @@ def initialize_detector(flann_index_kdtree: int = 1,
     return sift, flann
 
 # uses sift and flann to match keypoints between template and target
-# repeats "iterations" times and returns a transformed ROI in the detected object's coords
+# repeats "max_iterations" times until a good iou is found and returns a transformed ROI in the detected object's coords
 # https://docs.opencv.org/4.x/d1/de0/tutorial_py_feature_homography.html
 def get_detection(sift: cv2.SIFT,
                   flann: cv2.FlannBasedMatcher,
                   template: np.ndarray, 
                   target: np.ndarray,
-                  iterations: int = 10,
+                  max_iterations: int = 10,
                   flann_k: int = 2,
                   min_match_count: int = 10,
                   matching_ratio_score: float = 0.7,
-                  ransac_threshold: float = 5.0):
+                  iou_threshold: float = 0.9,
+                  ransac_threshold: float = 5.0,
+                  return_metrics: bool = True) -> tuple[dict, dict]:
     
     # find the keypoints and descriptors with SIFT
     kp_template, des_template = sift.detectAndCompute(template, None)
     kp_target, des_target = sift.detectAndCompute(target, None)
-    
-    all_H = []
 
-    # repeating a few times should make the process more repeatable
-    for i in range(iterations): 
+    results = {"H": [],
+               "transformed_box": [],
+              }
+    
+    metrics = {"iou": [],
+              }
+
+    # i found that this code doesn't work for arbitrary x, y values
+    # it seems much better if origin at (0, 0)
+    h, w, _ = template.shape # not greyscale, so 3 channels
+    box_points = np.float32([
+        [0, 0],
+        [0, h - 1],
+        [w - 1, h - 1],
+        [w - 1, 0]
+        ]).reshape(-1, 1, 2)
+    
+    # exits when iou exceeds set threshold
+    for i in range(max_iterations): 
         matches = flann.knnMatch(des_template, des_target, k = flann_k)
 
         # store all the good matches as per Lowe's ratio test.
@@ -122,33 +189,55 @@ def get_detection(sift: cv2.SIFT,
             dst_pts = np.float32([kp_target[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
          
             H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, ransac_threshold)
-            all_H.append(H)
+
+            # apply transformation to rectangle
+            transformed_box = cv2.perspectiveTransform(box_points, H)
+            H_inv = np.linalg.inv(H)
+            warped_target = cv2.warpPerspective(target, H_inv, (w, h), cv2.INTER_LINEAR, borderMode = cv2.BORDER_CONSTANT, borderValue = (0, 0, 0))
+
+            # score prediction and return if good enough
+            template_corners = find_corners(template)
+            target_corners = find_corners(warped_target)
+
+            sorted_template_corners = sort_2D_points(template_corners)
+            sorted_target_corners = sort_2D_points(target_corners)
+
+            iou = calculate_iou(sorted_template_corners, sorted_target_corners, (h, w))
+
+            if return_metrics:
+                metrics["iou"].append(iou)
+
+            results["H"].append(H)
+            results["transformed_box"].append(transformed_box)
+
+            if iou >= iou_threshold:
+                return results, metrics
          
         else:
             print(f"Not enough matches are found in iter {i}: {len(good_matches)}/{min_match_count}")
-
-    # i found that this code doesn't work for arbitrary x, y values
-    # it seems much better if origin at (0, 0)
-    h, w, _ = template.shape # not greyscale, so 3 channels
-    box_points = np.float32([
-        [0, 0],
-        [0, h - 1],
-        [w - 1, h - 1],
-        [w - 1, 0]
-        ]).reshape(-1, 1, 2)
-
-    # apply transformation to rectangle
-    avg_H = np.mean(np.array(all_H), axis = 0)
-    transformed_box = cv2.perspectiveTransform(box_points, avg_H)
     
-    return transformed_box
+    return results, metrics
 
-# converts image to greyscale image
-def image_to_np_gray(image: np.ndarray) -> np.ndarray:
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    np_gray_image = np.asarray(gray_image)
+# iou calculation defined as intersection / union
+# we can get this by drawing a polygon from the input points
+def calculate_iou(points1: np.ndarray,
+                  points2: np.ndarray,
+                  dims: tuple[int, int]) -> float:
 
-    return np_gray_image
+    points1 = points1.astype(np.int32)
+    points2 = points2.astype(np.int32)
+
+    mask1 = np.zeros((dims[0], dims[1]), dtype = np.uint8)
+    mask2 = np.zeros((dims[0], dims[1]), dtype = np.uint8)
+    
+    cv2.fillPoly(mask1, [points1], 1)
+    cv2.fillPoly(mask2, [points2], 1)
+    
+    intersection = np.logical_and(mask1, mask2).sum()
+    union = np.logical_or(mask1, mask2).sum()
+    iou = intersection / union if union > 0 else 0
+
+    return iou
 
 # draws lines connecting to points on image
 def draw_polygon(image: np.ndarray,
@@ -157,69 +246,3 @@ def draw_polygon(image: np.ndarray,
                  thickness: int = 3) -> None:
 
     cv2.polylines(image, [np.int32(points)], True, color = color, thickness = thickness)
-
-# draw a box around detected apriltag
-# not really a bbox because it rotates, but who cares :D
-def draw_apriltag_bbox(image: np.ndarray,
-                       tag: apriltag.Detection,
-                       color: tuple[int, int, int] = (0, 255, 0),
-                       thickness: int = 1) -> None:
-    
-    corner_points = tag.corners.astype(int)
-    center = tag.center.astype(int)
-
-    cv2.polylines(image, [corner_points], isClosed = True, color = color, thickness = thickness)
-    cv2.circle(image, center, 1, color, -1)
-
-# draws +x and +y relative to the apriltag
-def draw_axis(image: np.ndarray,
-              tag: apriltag.Detection,
-              color: tuple[int, int, int] = (0, 255, 0),
-              arrow_scale: float = 0.1,
-              text_offset: int = 10) -> None:
-
-    # calculate the x and y vectors of the detected apriltag
-    corner_points = tag.corners.astype(int)
-    center = tag.center.astype(int)
-    x_vec = corner_points[1] - corner_points[0]
-    y_vec = corner_points[1] - corner_points[2]
-
-    x_unit = x_vec / np.linalg.norm(x_vec)
-    y_unit = y_vec / np.linalg.norm(y_vec)
-
-    arrow_length = int(min(np.linalg.norm(x_vec), np.linalg.norm(y_vec)) * arrow_scale)
-
-    x_label_pos = center + x_unit * arrow_length + np.array([text_offset, 0])
-    y_label_pos = center + y_unit * arrow_length + np.array([0, text_offset])
-
-    cv2.arrowedLine(image, tuple(center), tuple((center + x_unit * arrow_length).astype(int)), color, 2, tipLength = 0.1)
-    cv2.arrowedLine(image, tuple(center), tuple((center + y_unit * arrow_length).astype(int)), color, 2, tipLength = 0.1)
-
-    cv2.putText(image, "x", tuple(x_label_pos.astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 1)
-    cv2.putText(image, "y", tuple(y_label_pos.astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 1)
-
-# draws how far away the detected apriltag is
-def draw_depth(image: np.ndarray,
-               tag: apriltag.Detection,
-               tag_size: float,
-               camera_matrix: np.ndarray,
-               distortion_coefficients: np.ndarray,
-               color: tuple[int, int, int] = (0, 255, 0)) -> None:
-
-    # define points for our object (apriltag) using the size of the apriltag
-    objPoints = np.array([
-        [-tag_size / 2, -tag_size / 2, 0],
-        [ tag_size / 2, -tag_size / 2, 0],
-        [ tag_size / 2,  tag_size / 2, 0],
-        [-tag_size / 2,  tag_size / 2, 0]
-    ])
-
-    corner_points = tag.corners
-    image_points = corner_points.reshape(-1, 2)
-
-    # use PnP to find rotation and translation vectors, rvec and tvec, respectively
-    res, rvec, tvec = cv2.solvePnP(objPoints, image_points, camera_matrix, distortion_coefficients)
-    depth = tvec[2][0] # depth is found here
-
-    if res and depth > 0:
-        cv2.putText(image, f"Depth: {depth:.2f}m", tuple(corner_points[2].astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 2)

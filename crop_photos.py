@@ -56,13 +56,13 @@ def crop_gui(image):
     return cropped_image, bbox_dict
 
 def main():
-    all_pictures = os.listdir(PATH_TO_PICTURES_FOLDER)
+    all_pictures = [f for f in os.listdir(PATH_TO_PICTURES_FOLDER) if f.endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
     
     for path_to_picture in all_pictures:
         path_to_bbox = os.path.join(PATH_TO_BBOX_FOLDER, path_to_picture)[:-3] + "toml"
         path_to_output = os.path.join(PATH_TO_DESTINATION_FOLDER, "roi_" + path_to_picture)
         
-        if not path_to_picture.startswith(".") and not os.path.exists(path_to_bbox):
+        if not os.path.exists(path_to_bbox):
             image = cv2.imread(os.path.join(PATH_TO_PICTURES_FOLDER, path_to_picture))
             rotated_image, angle = rotate_gui(image)
             res_image, bbox_dict = crop_gui(rotated_image)
