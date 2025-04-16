@@ -2,10 +2,10 @@
 
 import cv2
 import numpy as np
-from utility_functions import sort_2D_points
+from utility_functions import sort_2d_points
 
 
-# finds checkerboard image and uses cv2 to find camera calibration matrices and distortion coefficients
+# uses checkerboard image to find camera calibration matrices and distortion coefficients
 # from opencv camera calibration wiki
 # saves result as a .npz file
 def calibrate_camera(path_to_checkerboard_image: str,
@@ -19,7 +19,7 @@ def calibrate_camera(path_to_checkerboard_image: str,
     gray_image = cv2.cvtColor(checkerboard_image, cv2.COLOR_BGR2GRAY)
     found, corners = cv2.findChessboardCorners(gray_image, checkerboard_size, None)
 
-    if found == False:
+    if found is False:
         raise ValueError("Found != True -> Checkerboard was not found.")
 
     # find robust corner points
@@ -36,17 +36,29 @@ def calibrate_camera(path_to_checkerboard_image: str,
     imagepoints.append(corners2)
 
     # we can finally calibrate
-    _, camera_M, distort_coeff, _, _ = cv2.calibrateCamera(objpoints, imagepoints, gray_image.shape[::-1], None, None)
-    new_camera_M, _ = cv2.getOptimalNewCameraMatrix(camera_M, distort_coeff, (width, height), 1, (width, height))
+    _, camera_matrix, distort_coeff, _, _ = cv2.calibrateCamera(objpoints,
+                                                           imagepoints,
+                                                           gray_image.shape[::-1],
+                                                           None,
+                                                           None)
 
-    np.savez(path_to_save_npz, camera_M = camera_M, new_camera_M = new_camera_M, distort_coeff = distort_coeff)
+    new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(camera_matrix,
+                                                    distort_coeff,
+                                                    (width, height),
+                                                    1,
+                                                    (width, height))
+
+    np.savez(path_to_save_npz,
+             camera_matrix = camera_matrix,
+             new_camera_matrix = new_camera_matrix,
+             distort_coeff = distort_coeff)
 
 # loads .npz file and returns the 3 saved numpy arrays
 def get_camera_calibration(filepath: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     npzfile = np.load(filepath)
-    camera_matrix = npzfile["camera_M"]
-    new_camera_matrix = npzfile["new_camera_M"]
+    camera_matrix = npzfile["camera_matrix"]
+    new_camera_matrix = npzfile["new_camera_matrix"]
     distortion_coefficients = npzfile["distort_coeff"]
 
     return camera_matrix, new_camera_matrix, distortion_coefficients
@@ -58,9 +70,19 @@ def undistort_image(image: np.ndarray,
                     distortion_coefficients: np.ndarray) -> np.ndarray:
 
     height, width = image.shape[:2]
-    new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, distortion_coefficients, (width, height), 1, (width, height))
+    new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(camera_matrix,
+                                                           distortion_coefficients,
+                                                           (width, height),
+                                                           1,
+                                                           (width, height))
+
     x, y, roi_width, roi_height = roi
-    undistorted_image = cv2.undistort(image, camera_matrix, distortion_coefficients, None, new_camera_matrix)
+    undistorted_image = cv2.undistort(image,
+                                      camera_matrix,
+                                      distortion_coefficients,
+                                      None,
+                                      new_camera_matrix)
+
     undistorted_image = undistorted_image[y:y + roi_height, x:x + roi_width]
 
     return undistorted_image
@@ -96,7 +118,10 @@ def find_corners(image,
     inverse_threshold = 255 - threshold
 
     # get external contours
-    contours = cv2.findContours(inverse_threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = cv2.findContours(inverse_threshold,
+                                cv2.RETR_EXTERNAL,
+                                cv2.CHAIN_APPROX_SIMPLE)
+
     contours = contours[0] if len(contours) == 2 else contours[1]
 
     # keep contours whose bounding boxes are greater than 1/4 in each dimension
@@ -210,9 +235,9 @@ def get_detection(sift: cv2.SIFT,
                 target_corners = find_corners(warped_target)
 
                 if target_corners is not None:
-                    sorted_template_corners = sort_2D_points(template_corners)
-                    sorted_target_corners = sort_2D_points(target_corners)
-        
+                    sorted_template_corners = sort_2d_points(template_corners)
+                    sorted_target_corners = sort_2d_points(target_corners)
+
                     iou = calculate_iou(sorted_template_corners, sorted_target_corners, (h, w))
 
             if return_metrics:

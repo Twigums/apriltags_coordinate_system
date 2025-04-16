@@ -1,7 +1,9 @@
-import cv2, apriltag, os
+import cv2
 import numpy as np
 
-from apriltag_functions import apriltag_init, detect_apriltag, draw_apriltag_bbox
+import os
+
+from apriltag_functions import apriltag_init, detect_apriltag, draw_apriltag_bbox, draw_axis, draw_depth
 from opencv_functions import get_camera_calibration, initialize_detector, get_detection, draw_polygon
 from utility_functions import color_to_rgb, calculate_matrix_angle
 
@@ -25,7 +27,12 @@ sift, flann = initialize_detector()
 
 # load all template images as numpy arrays
 templates = []
-template_filenames = [f for f in os.listdir(PATH_TO_TEMPLATES) if f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff'))]
+template_filenames = [f for f in os.listdir(PATH_TO_TEMPLATES) if f.endswith((".png",
+                                                                              ".jpg",
+                                                                              ".jpeg",
+                                                                              ".bmp",
+                                                                              ".tiff"))]
+
 for template_filename in template_filenames:
     path_to_template = os.path.join(PATH_TO_TEMPLATES, template_filename)
     image = cv2.imread(path_to_template)
@@ -38,7 +45,7 @@ for template_filename in template_filenames:
 
 if USE_APRILTAGS:
     at_detector = apriltag_init()
-    tag_size = 0.02 # in meters
+    APRILTAG_SIZE = 0.02 # in meters
 
 while True:
     ret, frame = cam.read()
@@ -57,7 +64,7 @@ while True:
         for tag in res:
             draw_apriltag_bbox(frame, tag, red_rgb)
             draw_axis(frame, tag, red_rgb)
-            draw_depth(frame, tag, tag_size, camera_matrix, distortion_coefficients, red_rgb)
+            draw_depth(frame, tag, APRILTAG_SIZE, camera_matrix, distortion_coefficients, red_rgb)
 
     key = cv2.waitKey(1) & 0xFF
 

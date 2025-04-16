@@ -1,4 +1,5 @@
-import apriltag, cv2
+import apriltag
+import cv2
 import numpy as np
 
 
@@ -37,7 +38,7 @@ def draw_apriltag_bbox(image: np.ndarray,
                        tag: apriltag.Detection,
                        color: tuple[int, int, int] = (0, 255, 0),
                        thickness: int = 1) -> None:
-    
+
     corner_points = tag.corners.astype(int)
     center = tag.center.astype(int)
 
@@ -65,8 +66,18 @@ def draw_axis(image: np.ndarray,
     x_label_pos = center + x_unit * arrow_length + np.array([text_offset, 0])
     y_label_pos = center + y_unit * arrow_length + np.array([0, text_offset])
 
-    cv2.arrowedLine(image, tuple(center), tuple((center + x_unit * arrow_length).astype(int)), color, 2, tipLength = 0.1)
-    cv2.arrowedLine(image, tuple(center), tuple((center + y_unit * arrow_length).astype(int)), color, 2, tipLength = 0.1)
+    cv2.arrowedLine(image,
+                    tuple(center),
+                    tuple((center + x_unit * arrow_length).astype(int)),
+                    color,
+                    2,
+                    tipLength = 0.1)
+    cv2.arrowedLine(image,
+                    tuple(center),
+                    tuple((center + y_unit * arrow_length).astype(int)),
+                    color,
+                    2,
+                    tipLength = 0.1)
 
     cv2.putText(image, "x", tuple(x_label_pos.astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 1)
     cv2.putText(image, "y", tuple(y_label_pos.astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 1)
@@ -80,7 +91,7 @@ def draw_depth(image: np.ndarray,
                color: tuple[int, int, int] = (0, 255, 0)) -> None:
 
     # define points for our object (apriltag) using the size of the apriltag
-    objPoints = np.array([
+    obj_points = np.array([
         [-tag_size / 2, -tag_size / 2, 0],
         [ tag_size / 2, -tag_size / 2, 0],
         [ tag_size / 2,  tag_size / 2, 0],
@@ -91,8 +102,14 @@ def draw_depth(image: np.ndarray,
     image_points = corner_points.reshape(-1, 2)
 
     # use PnP to find rotation and translation vectors, rvec and tvec, respectively
-    res, _, tvec = cv2.solvePnP(objPoints, image_points, camera_matrix, distortion_coefficients)
+    res, _, tvec = cv2.solvePnP(obj_points, image_points, camera_matrix, distortion_coefficients)
     depth = tvec[2][0] # depth is found here
 
     if res and depth > 0:
-        cv2.putText(image, f"Depth: {depth:.2f}m", tuple(corner_points[2].astype(int)), cv2.FONT_HERSHEY_COMPLEX, 0.5, color, 2)
+        cv2.putText(image,
+                    f"Depth: {depth:.2f}m",
+                    tuple(corner_points[2].astype(int)),
+                    cv2.FONT_HERSHEY_COMPLEX,
+                    0.5,
+                    color,
+                    2)

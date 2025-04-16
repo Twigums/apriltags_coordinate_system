@@ -18,7 +18,7 @@ def calculate_confidence_window(data: np.ndarray,
                                 confidence_interval_percent: float = 0.95,
                                 two_tail: bool = True) -> float:
 
-    tails = 2 if two_tail == True else 1
+    tails = 2 if two_tail is True else 1
 
     std = np.std(data, axis = 0)
 
@@ -53,7 +53,7 @@ def calculate_matrix_angle(H):
 # sort points in a more distinct way so its interpretable in 2D
 # finds the center, and calculates the arctan angle of each point respective to the center
 # returns the points, sorted
-def sort_2D_points(points):
+def sort_2d_points(points):
     angle_points = []
     center = np.mean(points, axis = 0)
     center_x, center_y = center.ravel()
@@ -70,4 +70,3 @@ def sort_2D_points(points):
     sorted_points = np.array(angle_points)[:, 1:]
 
     return sorted_points
-
