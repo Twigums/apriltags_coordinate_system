@@ -91,7 +91,7 @@ def draw_depth(image: np.ndarray,
     image_points = corner_points.reshape(-1, 2)
 
     # use PnP to find rotation and translation vectors, rvec and tvec, respectively
-    res, rvec, tvec = cv2.solvePnP(objPoints, image_points, camera_matrix, distortion_coefficients)
+    res, _, tvec = cv2.solvePnP(objPoints, image_points, camera_matrix, distortion_coefficients)
     depth = tvec[2][0] # depth is found here
 
     if res and depth > 0:

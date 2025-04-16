@@ -20,9 +20,8 @@ def calculate_confidence_window(data: np.ndarray,
 
     tails = 2 if two_tail == True else 1
 
-    mean = np.mean(data, axis = 0)
     std = np.std(data, axis = 0)
-    
+
     # confidence interval
     z_score = stats.norm.ppf(q = 1 - (1 - confidence_interval_percent) / tails)
     confidence_window = z_score * std / np.sqrt(len(data))
@@ -31,7 +30,7 @@ def calculate_confidence_window(data: np.ndarray,
 
 def calculate_confidence(confidence_windows: np.ndarray,
                          k: float = 1) -> float:
-    
+
     confidence = 1.0 - np.exp(-k / (np.mean(confidence_windows) + 1e-5))
 
     return confidence
@@ -42,9 +41,9 @@ def calculate_matrix_angle(H):
     # upper 2x2 normalized
     H = H / H[2, 2]
     A = H[0:2, 0:2]
-        
+
     # SVD
-    U, S, Vt = np.linalg.svd(A)
+    U, _, Vt = np.linalg.svd(A)
     R = U @ Vt
     theta = np.arctan2(R[1, 0], R[0, 0]) * 180 / np.pi
 
@@ -65,7 +64,7 @@ def sort_2D_points(points):
         dy = y - center_y
         theta = np.arctan2(dy, dx)
         angle_points.append([theta, x, y])
-    
+
     # sort by theta so result will be ordered clockwise starting from quadrant 2
     angle_points.sort()
     sorted_points = np.array(angle_points)[:, 1:]

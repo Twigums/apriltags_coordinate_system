@@ -51,13 +51,13 @@ while True:
         # apriltags needs input to be numpy.int8 grayscale
         gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         np_gray_image = np.asarray(gray_image)
-    
+
         res = detect_apriltag(at_detector, np_gray_image)
-    
+
         for tag in res:
             draw_apriltag_bbox(frame, tag, red_rgb)
             draw_axis(frame, tag, red_rgb)
-            draw_depth(frame, tag, tag_size, camera_matrix, distorion_coefficients, red_rgb)
+            draw_depth(frame, tag, tag_size, camera_matrix, distortion_coefficients, red_rgb)
 
     key = cv2.waitKey(1) & 0xFF
 
@@ -69,17 +69,26 @@ while True:
         # if we have multiple templates, probably zip it with different colors?
         for template in templates:
             results, metrics = get_detection(sift, flann, template, frame)
-    
-            # its slower than [-1], but only works if we found a good iou early
-            idx_best = np.argmax(metrics["iou"])
-            best_H = results["H"][idx_best]
-            best_transformed_box = results["transformed_box"][idx_best]
-            best_iou = metrics["iou"][idx_best]
-    
-            draw_polygon(frame, best_transformed_box)
-            theta = calculate_matrix_angle(best_H)
-    
-            print(f"IOU: {best_iou}, Angle: {theta}")
+
+            if len(metrics["iou"]) > 0:
+
+                # its slower than [-1], but that only works if we found a good iou early
+                idx_best = np.argmax(metrics["iou"])
+                best_H = results["H"][idx_best]
+                best_transformed_box = results["transformed_box"][idx_best]
+                best_iou = metrics["iou"][idx_best]
+
+                if best_transformed_box is not None:
+                    draw_polygon(frame, best_transformed_box)
+                    theta = calculate_matrix_angle(best_H)
+
+                    print(f"IOU: {best_iou}, Angle: {theta}")
+
+                else:
+                    print("Failed to find object.")
+
+            else:
+                print("Failed to find object.")
 
     cv2.imshow("camera", frame)
 
