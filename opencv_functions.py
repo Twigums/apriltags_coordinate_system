@@ -1,6 +1,7 @@
 # istg training a model wouldve been easier than doing this
 
-import cv2
+# bypass pylint member error
+from cv2 import cv2
 import numpy as np
 from utility_functions import sort_2d_points
 
@@ -36,14 +37,14 @@ def calibrate_camera(path_to_checkerboard_image: str,
     imagepoints.append(corners2)
 
     # we can finally calibrate
-    _, camera_matrix, distort_coeff, _, _ = cv2.calibrateCamera(objpoints,
+    _, camera_matrix, distortion_coefficients, _, _ = cv2.calibrateCamera(objpoints,
                                                            imagepoints,
                                                            gray_image.shape[::-1],
                                                            None,
                                                            None)
 
     new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(camera_matrix,
-                                                    distort_coeff,
+                                                    distortion_coefficients,
                                                     (width, height),
                                                     1,
                                                     (width, height))
@@ -51,22 +52,24 @@ def calibrate_camera(path_to_checkerboard_image: str,
     np.savez(path_to_save_npz,
              camera_matrix = camera_matrix,
              new_camera_matrix = new_camera_matrix,
-             distort_coeff = distort_coeff)
+             distortion_coefficients = distortion_coefficients,
+             resolution = (width, height)) # even though its a tuple, itll save as an array
 
 # loads .npz file and returns the 3 saved numpy arrays
-def get_camera_calibration(filepath: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_camera_calibration(filepath: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     npzfile = np.load(filepath)
     camera_matrix = npzfile["camera_matrix"]
     new_camera_matrix = npzfile["new_camera_matrix"]
-    distortion_coefficients = npzfile["distort_coeff"]
+    distortion_coefficients = npzfile["distortion_coefficients"]
+    resolution = npzfile["resolution"]
 
-    return camera_matrix, new_camera_matrix, distortion_coefficients
+    return camera_matrix, new_camera_matrix, distortion_coefficients, resolution
 
 # undistort an image by using camera numpy arrays
 # returns the undistorted image as a numpy array
-def undistort_image(image: np.ndarray, 
-                    camera_matrix: np.ndarray, 
+def undistort_image(image: np.ndarray,
+                    camera_matrix: np.ndarray,
                     distortion_coefficients: np.ndarray) -> np.ndarray:
 
     height, width = image.shape[:2]
@@ -157,19 +160,21 @@ def initialize_detector(flann_index_kdtree: int = 1,
 
     sift = cv2.SIFT_create()
 
-    index_params = dict(algorithm = flann_index_kdtree, trees = flann_trees)
-    search_params = dict(checks = flann_checks)
+    index_params = {"algorithm": flann_index_kdtree, "trees": flann_trees}
+    search_params = {"checks": flann_checks}
 
     flann = cv2.FlannBasedMatcher(index_params, search_params)
 
     return sift, flann
 
+
 # uses sift and flann to match keypoints between template and target
-# repeats "max_iterations" times until a good iou is found and returns a transformed ROI in the detected object's coords
+# repeats "max_iterations" times until a good iou is found
+# returns a transformed ROI in the detected object's coords
 # https://docs.opencv.org/4.x/d1/de0/tutorial_py_feature_homography.html
 def get_detection(sift: cv2.SIFT,
                   flann: cv2.FlannBasedMatcher,
-                  template: np.ndarray, 
+                  template: np.ndarray,
                   target: np.ndarray,
                   max_iterations: int = 10,
                   flann_k: int = 2,
@@ -201,7 +206,7 @@ def get_detection(sift: cv2.SIFT,
         ]).reshape(-1, 1, 2)
 
     # exits when iou exceeds set threshold
-    for _ in range(max_iterations): 
+    for _ in range(max_iterations):
         matches = flann.knnMatch(des_template, des_target, k = flann_k)
 
         # store all the good matches as per Lowe's ratio test.
@@ -228,7 +233,12 @@ def get_detection(sift: cv2.SIFT,
             if H is not None:
                 transformed_box = cv2.perspectiveTransform(box_points, H)
                 H_inv = np.linalg.inv(H)
-                warped_target = cv2.warpPerspective(target, H_inv, (w, h), cv2.INTER_LINEAR, borderMode = cv2.BORDER_CONSTANT, borderValue = (0, 0, 0))
+                warped_target = cv2.warpPerspective(target,
+                                                    H_inv,
+                                                    (w, h),
+                                                    cv2.INTER_LINEAR,
+                                                    borderMode = cv2.BORDER_CONSTANT,
+                                                    borderValue = (0, 0, 0))
 
                 # score prediction and return if good enough
                 template_corners = find_corners(template)
