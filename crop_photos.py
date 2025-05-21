@@ -1,7 +1,7 @@
+import os
+
 import cv2
 import toml
-
-import os
 
 from opencv_functions import rotate_image
 
@@ -78,11 +78,10 @@ def main():
             res_image, bbox_dict = crop_gui(rotated_image)
 
             bbox_dict["angle"] = angle
-            with open(path_to_bbox, 'w') as f:
+            with open(path_to_bbox, "w", encoding = "utf-8") as f:
                 toml.dump(bbox_dict, f)
 
             cv2.imwrite(path_to_output, res_image)
 
 if __name__ == "__main__":
     main()
-

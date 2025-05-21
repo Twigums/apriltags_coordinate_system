@@ -70,3 +70,26 @@ def sort_2d_points(points):
     sorted_points = np.array(angle_points)[:, 1:]
 
     return sorted_points
+
+# in input units (ex: 5 mm -> returns dx, dy in mm)
+def calculate_displacement(point: np.ndarray,
+                           camera_matrix: np.ndarray,
+                           height: float):
+    x, y = point
+
+    # principal point components
+    cx = camera_matrix[0, 2]
+    cy = camera_matrix[1, 2]
+
+    # focal length components
+    fx = camera_matrix[0, 0]
+    fy = camera_matrix[1, 1]
+
+    dx_pixels = x - cx
+    dy_pixels = y - cy
+
+    # convert from pixels to input units
+    dx_real = (dx_pixels / fx) * height
+    dy_real = (dy_pixels / fy) * height
+
+    return dx_real, dy_real

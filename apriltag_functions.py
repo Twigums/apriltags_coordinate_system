@@ -5,7 +5,7 @@ import numpy as np
 
 # initialize apriltag detector with options
 def apriltag_init() -> apriltag.Detector:
-    options = apriltag.DetectorOptions(
+    _ = apriltag.DetectorOptions(
         families = "tag36h11",
         border = 1,
         nthreads = 4,

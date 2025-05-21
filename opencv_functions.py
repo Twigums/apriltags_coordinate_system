@@ -1,7 +1,6 @@
 # istg training a model wouldve been easier than doing this
 
-# bypass pylint member error
-from cv2 import cv2
+import cv2
 import numpy as np
 from utility_functions import sort_2d_points
 
@@ -11,7 +10,8 @@ from utility_functions import sort_2d_points
 # saves result as a .npz file
 def calibrate_camera(path_to_checkerboard_image: str,
                      checkerboard_size: tuple[int, int],
-                     path_to_save_npz: str) -> None:
+                     path_to_save_npz: str,
+                     focus: int) -> None:
 
     checkerboard_units_x, checkerboard_units_y = checkerboard_size
     checkerboard_image = cv2.imread(path_to_checkerboard_image)
@@ -56,15 +56,16 @@ def calibrate_camera(path_to_checkerboard_image: str,
              resolution = (width, height)) # even though its a tuple, itll save as an array
 
 # loads .npz file and returns the 3 saved numpy arrays
-def get_camera_calibration(filepath: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def get_camera_calibration(filepath: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     npzfile = np.load(filepath)
     camera_matrix = npzfile["camera_matrix"]
     new_camera_matrix = npzfile["new_camera_matrix"]
     distortion_coefficients = npzfile["distortion_coefficients"]
     resolution = npzfile["resolution"]
+    focus = npzfile["focus"]
 
-    return camera_matrix, new_camera_matrix, distortion_coefficients, resolution
+    return camera_matrix, new_camera_matrix, distortion_coefficients, resolution, focus
 
 # undistort an image by using camera numpy arrays
 # returns the undistorted image as a numpy array
@@ -185,7 +186,7 @@ def get_detection(sift: cv2.SIFT,
                   return_metrics: bool = True) -> tuple[dict, dict]:
 
     # find the keypoints and descriptors with SIFT
-    kp_template, des_template = sift.detectAndCompute(template, None)
+    kp_template, des_template = sift.detectAndCompute(template, None) # should be done ahead of time
     kp_target, des_target = sift.detectAndCompute(target, None)
 
     results = {"H": [],
