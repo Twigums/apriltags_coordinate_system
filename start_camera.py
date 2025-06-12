@@ -1,7 +1,7 @@
+import os
+
 import cv2
 import numpy as np
-
-import os
 
 from apriltag_functions import apriltag_init, detect_apriltag, draw_apriltag_bbox, draw_axis, draw_depth
 from opencv_functions import get_camera_calibration, initialize_detector, get_detection, draw_polygon
@@ -9,18 +9,21 @@ from utility_functions import color_to_rgb, calculate_matrix_angle
 
 
 USE_APRILTAGS = False
-PATH_TO_CAMERA_CALIBRATION_FILE = "./calibration/20250408-Arducam.npz"
+PATH_TO_CAMERA_CALIBRATION_FILE = "./calibration/20250417-EMEET.npz"
 PATH_TO_TEMPLATES = "./templates"
 
-cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture(1)
+
+fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+cam.set(cv2.CAP_PROP_FOURCC, fourcc)
+
+cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
 camera_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 camera_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-cam.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
-cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
-
-camera_matrix, new_camera_matrix, distortion_coefficients = get_camera_calibration(PATH_TO_CAMERA_CALIBRATION_FILE)
+camera_matrix, new_camera_matrix, distortion_coefficients, resolution = get_camera_calibration(PATH_TO_CAMERA_CALIBRATION_FILE)
 red_rgb = color_to_rgb("red")
 
 sift, flann = initialize_detector()
@@ -68,10 +71,7 @@ while True:
 
     key = cv2.waitKey(1) & 0xFF
 
-    if key == ord("q"):
-        break
-
-    elif key == ord("t"):
+    if key == ord("t"):
 
         # if we have multiple templates, probably zip it with different colors?
         for template in templates:
@@ -96,6 +96,9 @@ while True:
 
             else:
                 print("Failed to find object.")
+
+    if key == ord("q"):
+        break
 
     cv2.imshow("camera", frame)
 
